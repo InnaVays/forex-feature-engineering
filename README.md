@@ -14,8 +14,5 @@ The project consists of the following steps:
 - **Model Training**: Train a Support Vector Machine (SVM) model using the selected profitable indicator combinations as features.
 - **SVM Model Performance Evaluating**
 
-## License
-This project is licensed under the MIT License. Feel free to use, modify, and distribute the code as necessary, subject to the terms and conditions of the license.
-
 ## Acknowledgments
 Special thanks to the developers of the TA-Lib library, which was used extensively in the generation of technical indicators and ChatGPT for this marvelous README file. 
