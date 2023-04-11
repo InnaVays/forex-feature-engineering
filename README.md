@@ -6,7 +6,8 @@ This project aims to identify profitable trading strategies for different Forex 
 ## Overview
 The project consists of the following steps:
 
-### Part 1
+### Part 1 
+TechInd_strategy_backtester.ipynb
 - **Data Import**: Import data a given Forex pair, granularity, and time period from OANDA api (some data files used in project are aready saved in hist_data directory).
 - **Data Preprocessing**: Convert OANDA jason data to dataframe, clean and preprocess.
 - **Feature Generation**: Apply numerous technical indicators to the preprocessed data, generating a large set of potential trading strategies.
@@ -15,7 +16,8 @@ The project consists of the following steps:
 - **Model Training**: Train a Support Vector Machine (SVM) Classification model using the selected profitable indicator combinations as features.
 - **SVM Classification Model Performance Evaluating**
 
-### Part 2
+### Part 2 
+FinNews_feature_extract.ipynb
 - **Reuters news archive scraper**
 - **News sensitivity analysis and relevant information extraction**
 - **LSTM NN regression model**: 3 day ahead prices prediction obased on recent prices and news.
