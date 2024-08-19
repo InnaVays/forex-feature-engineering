@@ -1,168 +1,272 @@
-
-import pandas as pd
 import numpy as np
-import functions
+import pandas as pd
+import pandas_ta as ta
 
-class Pair_tester:
-    def __init__(self, path, pair, granularity, pip, year = 2021):
-        self.df = pd.read_pickle( f"{path}{pair}_{granularity}.pkl" )
-        self.pip = pip
-        self.year = year
-        self.initialize_dataframe()
-        self.indicators_name = []
-        self.stop_loss = None
-        self.take_profit = None
-        self.exit_condition_long = None
-        self.exit_condition_short = None
-        self.enter_condition_long = None
-        self.enter_condition_short = None
-        self.best_strategies = None
-        self.strategies_list = None
 
-    def initialize_dataframe(self):
-        num_col = [x for x in self.df.columns if x not in['volume','time'] ]
-        self.df[num_col] = self.df[num_col].apply(pd.to_numeric)
-        self.df.index = pd.to_datetime(self.df.time)
-        self.df = self.df[self.df.index.year == self.year]
-        self.df.rename(columns = {'volume':'Volume','mid_o':'Open','mid_c':'Close','mid_l':'Low','mid_h':'High','time':'Date'},inplace=True)
-        self.df['Spr'] = (self.df.ask_c - self.df.bid_c)
-        self.df = self.df.drop(['bid_o', 'bid_h', 'bid_l', 'bid_c', 'ask_o', 'ask_h', 'ask_l', 'ask_c'],axis=1)
-        
-        self.df['Day'] = self.df.index.date
-        index_list =sorted(set(self.df['Day']))
-        df_1D = pd.DataFrame( index = index_list, columns = [ 'Open']  )
-        df_1D.Open = [ self.df['Open'][ self.df.Day == idx ][0] for idx in index_list ]
+# INDICATORS
 
-        self.df['Date_start'] = np.nan 
-        for date in df_1D.index:
-            self.df.Date_start[(date.year == self.df.index.year) & (date.month == self.df.index.month) \
-                        & (date.day == self.df.index.day)] = df_1D.Open[ df_1D.index == date ][0]
+def apply_bunch_of_indicators( pair ):
+    # SMMA short cross
+    SMMA_f = ta.smma(pair.df.Close, 3)
+    SMMA_s = ta.smma(pair.df.Close, 5)
+    enter_long =  ( SMMA_f > SMMA_s ) & ( SMMA_f.shift() < SMMA_s.shift() ) 
+    enter_short = ( SMMA_f < SMMA_s ) & ( SMMA_f.shift() > SMMA_s.shift() ) 
+    pair.add_indicator( 'SMMA_1_cross', enter_long, enter_short )
 
-        self.df['Date_start'].ffill( inplace = True)
-        self.df['Short_trend'] = np.where( self.df.Date_start < self.df.Close, 1, 0 )
-        self.df['Short_trend'] = np.where( self.df.Date_start > self.df.Close, -1, self.df.Short_trend )
+    # SMA cross
+    SMA = ta.smma(pair.df.Close, 10)
+    enter_long =  ( SMA < pair.df.Close ) 
+    enter_short = ( SMA > pair.df.Close ) 
+    pair.add_indicator( 'SMA_1_cross', enter_long, enter_short )
 
-    def add_indicator(self, name, enter_long_vector, enter_short_vector):
-        self.indicators_name.append( name )
-        #self.df[name+'_value'] = value_vector
-        self.df[name+'_enter_long'] = enter_long_vector
-        self.df[name+'_enter_short'] = enter_short_vector
+    # SMA cross
+    SMA = ta.smma(pair.df.Close, 20)
+    enter_long =  ( SMA < pair.df.Close ) 
+    enter_short = ( SMA > pair.df.Close ) 
+    pair.add_indicator( 'SMA_2_cross', enter_long, enter_short )
 
-    def set_enter_condition(self, long_vector, short_vector):
-        self.enter_condition_long = long_vector
-        self.enter_condition_short = short_vector
+    # SMMA long cross
+    SMMA_f = ta.smma(pair.df.Close, 10)
+    SMMA_s = ta.smma(pair.df.Close, 20)
+    enter_long =  ( SMMA_f > SMMA_s ) & ( SMMA_f.shift() < SMMA_s.shift() ) 
+    enter_short = ( SMMA_f < SMMA_s ) & ( SMMA_f.shift() > SMMA_s.shift() ) 
+    pair.add_indicator( 'SMMA_2_cross', enter_long, enter_short )
 
-    def set_stop_loss_vector( self, vector):
-        self.stop_loss = vector
+    # BB
+    BB = ta.ema(pair.df.Close,20)
+    BB_up = BB + 0.8*pair.df.Close.rolling(20).std()
+    BB_down = BB - 0.8*pair.df.Close.rolling(20).std()
+    enter_long =  ( BB_up.shift() > pair.df.Close.shift() ) & ( BB_up < pair.df.Close )
+    enter_short = ( BB_down.shift() < pair.df.Close.shift() ) & ( BB_down > pair.df.Close )
+    pair.add_indicator( 'BB_1', enter_long, enter_short )
 
-    def set_take_profit_vector( self, vector):
-        self.take_profit = vector
+    # BB
+    BB = ta.ema(pair.df.Close,50)
+    BB_up = BB + 1*pair.df.Close.rolling(50).std()
+    BB_down = BB - 1*pair.df.Close.rolling(50).std()
+    enter_long =  ( BB_up.shift() > pair.df.Close.shift() ) & ( BB_up < pair.df.Close )
+    enter_short = ( BB_down.shift() < pair.df.Close.shift() ) & ( BB_down > pair.df.Close )
+    pair.add_indicator( 'BB_2', enter_long, enter_short )
 
-    def set_exit_condition( self, long_vector,  short_vector):
-        self.exit_condition_long = long_vector
-        self.exit_condition_short = short_vector
+    # RSI 14:
+    RSI_14 = ta.rsi(pair.df.Close, length=14)
+    enter_long = (RSI_14 > 50)
+    enter_short = (RSI_14 < 50)
+    pair.add_indicator( 'RSI_14', enter_long, enter_short )
 
-    def run_simulator(self):
-        Strategy = functions.trade_simulator(self.df.Close, self.df.High, self.df.Low, self.df.Spr, 
-                                                enter_long=self.enter_condition_long, 
-                                                enter_short=self.enter_condition_short, 
-                                                take_profit=self.take_profit, 
-                                                stop_loss=self.stop_loss, 
-                                                )
-        self.df['Position'] = Strategy[1]
-        self.df['Win_loss'] = Strategy[0]
+    # RSI 3:
+    RSI_3 = ta.rsi(pair.df.Close, length=3)
+    enter_long = (RSI_3 > 70) & (RSI_3.shift() < RSI_3)
+    enter_short = (RSI_3 < 30) & (RSI_3.shift() > RSI_3)
+    pair.add_indicator( 'RSI_3', enter_long, enter_short )
 
-    def get_labels(self, win_rate):
-        # LABELS for 2 CLASSES
-        Labels  = np.zeros( len(self.df.Close) )
-        Labels[:] = np.nan
-        Go = True
-        #win_rate = pips*self.pip
-        i = 0
-        for i in range(0,len(Labels)):
-            exit_price_plus = self.df.Close[i] + win_rate[i]
-            exit_price_minus = self.df.Close[i] - win_rate[i]
-            Go = True
-            j = 1
-            while Go:
-                if i+j > len(Labels)-1:
-                    break
-                if (exit_price_plus <= self.df.High[i+j]):
-                    Labels[i] = 1
-                    Go = False
-                    continue
-                elif (exit_price_minus >= self.df.Low[i+j]):
-                    Labels[i] = -1
-                    Go = False
-                    continue
-                else:
-                    j += 1
-        self.df['Labels_2'] = Labels
+    # MACD:
+    MACD = ta.ema(pair.df.Close, 12) - ta.ema(pair.df.Close,26)
+    MACDh = MACD-ta.ema(MACD, 9)
+    enter_long = (MACDh > 0) & (MACDh.shift() < 0)
+    enter_short = (MACDh < 0) & (MACDh.shift() > 0)
+    pair.add_indicator( 'MACD', enter_long, enter_short )
 
-    def apply_bunch_of_indicators(self):
-        functions.apply_bunch_of_indicators( self )
+    # Awesome Oscillator: ao
+    AO = ta.ao(high=pair.df.High,low=pair.df.Low)
+    enter_long = AO > AO.shift() 
+    enter_short = AO < AO.shift()
+    pair.add_indicator( 'AO', enter_long, enter_short )
 
-    def run_indicators_search(self, threshold):
-        names_num = len(self.indicators_name)
+    #Stochastic Oscillator: stoch
+    Stochstics = ta.stoch(close = pair.df.Close, high=pair.df.High,low=pair.df.Low, k=12, d = 3, smooth = 4 )
+    STOCHk = Stochstics.iloc[:,0]
+    STOCHh = Stochstics.iloc[:,2]
+    enter_long = (STOCHk < 50) & (STOCHh > 0)
+    enter_short = (STOCHk > 50) & (STOCHh < 0)
+    pair.add_indicator( 'STOCH', enter_long, enter_short )
 
-        strategies_df = pd.DataFrame( columns = ['Indicator_1','Indicator_2','Indicator_3',
-                                            'short_luck_ratio', 'long_luck_ratio','short_opps','long_opps'] )
+    # CCI
+    CCI = ta.cci(close=pair.df.Close,low=pair.df.Low,high=pair.df.High, length=20)
+    enter_long = (CCI > 100) & (CCI.shift() < CCI)
+    enter_short = (CCI < -100) & (CCI.shift() > CCI)
+    pair.add_indicator( 'CCI', enter_long, enter_short )
 
-        for i in range(0, names_num-2):
-            for j in range(i+1, names_num-1):
-                for k in range(j+1, names_num):
-                    enter_condition_long = self.df[self.indicators_name[i]+'_enter_long'] \
-                                            & self.df[self.indicators_name[j]+'_enter_long'] \
-                                            & self.df[self.indicators_name[k]+'_enter_long'] 
-                    
-                    enter_condition_short = self.df[self.indicators_name[i]+'_enter_short'] \
-                                                & self.df[self.indicators_name[j]+'_enter_short'] \
-                                                & self.df[self.indicators_name[k]+'_enter_short'] 
-                        
-                    short_opps = sum(enter_condition_short)
-                    long_opps = sum(enter_condition_long)
-                        
-                    if long_opps == 0:
-                        long_luck_ratio = 0
-                    else:
-                        long_luck_ratio = sum(self.df.Labels_2[ enter_condition_long ] == 1)/ long_opps
-                        
-                    if short_opps == 0:
-                        short_luck_ratio = 0
-                    else:
-                        short_luck_ratio = sum(self.df.Labels_2[ enter_condition_short ] == -1)/ short_opps
-                    strategies_df = strategies_df.append({'Indicator_1': self.indicators_name[i],
-                                                            'Indicator_2': self.indicators_name[j],
-                                                            'Indicator_3': self.indicators_name[k],
-                                                            'short_luck_ratio': short_luck_ratio,
-                                                            'long_luck_ratio': long_luck_ratio,
-                                                            'short_opps': short_opps,
-                                                            'long_opps': long_opps }, ignore_index=True)
+    # Money Flow Index: mfi
+    MFI = ta.mfi(close = pair.df.Close, high = pair.df.High, low=pair.df.Low, volume=pair.df.Volume )
+    enter_long = (MFI > 50)
+    enter_short = (MFI < 50)
+    pair.add_indicator( 'MFI', enter_long, enter_short )
 
-        best_strategies = strategies_df[ (strategies_df['short_luck_ratio'] > threshold) &
-                                        (strategies_df['long_luck_ratio'] > threshold) &
-                                        (strategies_df['short_opps'] > 1) &
-                                        (strategies_df['long_opps'] > 1) ].sort_values('short_opps', ascending=False)
-        print('Number of potential strategies: ',len(best_strategies))
-        self.best_strategies = best_strategies
+    #Stochastic RSI: stochrsi
+    Stochrsi = ta.stochrsi(close = pair.df.Close)
+    STOCHRSIk = Stochrsi.iloc[:,0]
+    STOCHRSId = Stochrsi.iloc[:,1]
+    enter_long = (STOCHRSIk < 30) & (STOCHRSIk > STOCHRSId)
+    enter_short = (STOCHRSIk > 70) & (STOCHRSIk < STOCHRSId)
+    pair.add_indicator( 'STOCHRSI', enter_long, enter_short )
 
-    def get_best_strategies_from_df(self, best_strategies_df):
-        strategies_num = len(best_strategies_df)
-        strategies_list = []
-        for i in range(0, strategies_num):
-            
-            enter_condition_long =    self.df[best_strategies_df.iloc[i,0]+'_enter_long'] \
-                                    & self.df[best_strategies_df.iloc[i,1]+'_enter_long'] \
-                                    & self.df[best_strategies_df.iloc[i,2]+'_enter_long'] 
-                    
-            enter_condition_short =   self.df[best_strategies_df.iloc[i,0]+'_enter_short'] \
-                                    & self.df[best_strategies_df.iloc[i,1]+'_enter_short'] \
-                                    & self.df[best_strategies_df.iloc[i,2]+'_enter_short'] 
-            
-            self.df['Strategy_'+str(i)] = np.where( enter_condition_long, 1,  0)
-            self.df['Strategy_'+str(i)] = np.where( enter_condition_short, -1,  self.df['Strategy_'+str(i)])
-            strategies_list.append('Strategy_'+str(i))
-        self.strategies_list = strategies_list
+    # Volume weighted average price
+    VWAP = ta.vwap(close = pair.df.Close , high = pair.df.High, low=pair.df.Low, volume=pair.df.Volume)
+    enter_long = (VWAP.shift() > pair.df.Close.shift()) & (VWAP < pair.df.Close)
+    enter_short = (VWAP.shift() < pair.df.Close.shift()) & (VWAP > pair.df.Close)
+    pair.add_indicator( 'MFI', enter_long, enter_short )
+
+    #Keltner Channel: kc
+    KC = ta.kc(close = pair.df.Close, high = pair.df.High, low=pair.df.Low )
+    enter_long = (KC.iloc[:,0] > pair.df.Close)
+    enter_short = (KC.iloc[:,2] < pair.df.Close)
+    pair.add_indicator( 'KC', enter_long, enter_short )
+
+    #Chaikin Money Flow: cmf
+    CMF = ta.cmf(close = pair.df.Close, high = pair.df.High, low=pair.df.Low, volume=pair.df.Volume )
+    enter_long = (CMF > 0) & (CMF.shift() < 0 )
+    enter_short = (CMF < 0) & (CMF.shift() > 0 )
+    pair.add_indicator( 'CMF', enter_long, enter_short )
     
-    def strategy_plot(self):
-        functions.strategy_outcome(self.df, 'Win_loss', 'Position')
+    #Rate of Change: roc
+    ROC = ta.roc(close = pair.df.Close , high = pair.df.High, low=pair.df.Low)
+    enter_long = (ROC > 0) & (ROC.shift() < 0 )
+    enter_short = (ROC < 0) & (ROC.shift() > 0 )
+    pair.add_indicator( 'ROC', enter_long, enter_short )    
+
+    # Average Directional Movement Index: adx
+    ADX = ta.adx(close = pair.df.Close, high = pair.df.High, low=pair.df.Low ).iloc[:,0]
+    enter_long = (ADX > 25) 
+    enter_short = (ADX > 25) 
+    pair.add_indicator( 'ADX', enter_long, enter_short ) 
+
+    #Momentum: mom
+    MOM = ta.mom(close = pair.df.Close , high = pair.df.High, low=pair.df.Low)
+    enter_long = (MOM > 0) 
+    enter_short = (MOM < 0) 
+    pair.add_indicator( 'MOM', enter_long, enter_short ) 
+
+    #Williams %R: willr
+    WILLR = ta.willr(close =  pair.df.Close, high =  pair.df.High, low= pair.df.Low )
+    enter_long = (WILLR > -20) 
+    enter_short = (WILLR < -80) 
+    pair.add_indicator( 'WILLR', enter_long, enter_short ) 
+    
+    #Parabolic Stop and Reverse: psar
+    PSAR = ta.psar(close = pair.df.Close, high = pair.df.High, low=pair.df.Low )
+    enter_long = ~PSAR.iloc[:,0].isna()
+    enter_short = ~PSAR.iloc[:,1].isna()
+    pair.add_indicator( 'PSAR', enter_long, enter_short ) 
+
+    #Supertrend: supertrend
+    Supertrend = ta.supertrend(close = pair.df.Close, high=pair.df.High,low=pair.df.Low)
+    enter_long = Supertrend.iloc[:,1] == 1
+    enter_short = Supertrend.iloc[:,1] == -1
+    pair.add_indicator( 'supertrend', enter_long, enter_short ) 
+
+    #Increasing: increasing
+    Increasing = ta.increasing(close = pair.df.Close, high=pair.df.High,low=pair.df.Low)
+    enter_long = Increasing == 1
+    enter_short = Increasing == 0
+    pair.add_indicator( 'increasing', enter_long, enter_short ) 
+
+    # Support/Resistance
+    resist_cond = (pair.df.High > pair.df.High.shift()) & (pair.df.High.shift() > pair.df.High.shift(2)) 
+    support_cond = (pair.df.Low < pair.df.Low.shift()) & (pair.df.Low.shift() < pair.df.Low.shift(2))
+    
+    pair.df['Resist'] = np.where( resist_cond , pair.df.High, np.nan )
+    pair.df['Resist'].ffill( inplace = True )
+
+    pair.df['Support'] = np.where( support_cond, pair.df.Low, np.nan )
+    pair.df['Support'].ffill( inplace = True )
+
+    enter_long = (pair.df.Close < pair.df.Support) & (pair.df.Close.shift() > pair.df.Support.shift()) \
+                & (pair.df.Resist > pair.df.Support)
+    enter_short = (pair.df.Close > pair.df.Resist) & (pair.df.Close.shift() < pair.df.Resist.shift()) \
+                & (pair.df.Resist > pair.df.Support)
+    pair.add_indicator( 'support_resist', enter_long, enter_short ) 
+
+    # Quantiles
+    EMA = ta.ema(pair.df.Close, 30)
+    test_short = pair.df.Close - EMA
+    test_quant_up =  test_short.rolling(40).quantile(1 - 0.05)
+    test_quant_down = test_short.rolling(40).quantile(0.05)
+    enter_long = (test_short < test_quant_down ) & (test_short.shift() > test_quant_down.shift() )
+    enter_short = (test_short > test_quant_up ) & (test_short.shift() < test_quant_up.shift() )
+    pair.add_indicator( 'Quantiles', enter_long, enter_short ) 
+                            
+def trade_simulator(Close, High, Low, Spr, enter_long, enter_short, take_profit, stop_loss ):
+    Position = np.zeros(len(Close))
+    Win_loss = np.zeros(len(Close))
+    Ent_exit = np.zeros(len(Close))
+    for i in range(1, len(Win_loss) ):  
+        # strategy_return INDICATORS : LONG ENTER:
+        if (enter_long[i]==1) & (Position[i-1] == 0) & (take_profit[i] == take_profit[i]) & (stop_loss[i] == stop_loss[i]):
+            Position[i] = 1
+            Win_loss[i] = Close[i] + Spr[i]/2
+            Ent_exit[i] = 0
+            stop_price = Close[i] - stop_loss[i]
+            exit_price = Close[i] + take_profit[i]
+            #print('go Long')
+            continue    
+            # EXIT THE CURRENT Position: EXIT LONG
+        if Position[i-1] == 1:
+            if (stop_price > Low[i]): 
+                Position[i] = 0
+                Win_loss[i] = stop_price - Spr[i]/2
+                Ent_exit[i] = 1
+                continue
+            elif (exit_price < High[i]): 
+                Position[i] = 0
+                Win_loss[i] = exit_price - Spr[i]/2
+                Ent_exit[i] = 2
+                continue
+            else:
+                Position[i] = 1
+                continue
+        # strategy_return INDICATORS : SHORT ENTER:
+        if (enter_short[i]==1) & (Position[i-1] == 0) & (take_profit[i] == take_profit[i]) & (stop_loss[i] == stop_loss[i]):
+            Position[i] = -1
+            Win_loss[i] = Close[i] - Spr[i]/2
+            stop_price = Close[i] + stop_loss[i]
+            exit_price = Close[i] - take_profit[i]
+            Ent_exit[i] = 0
+            continue
+        # EXIT THE CURRENT Position: EXIT SHORT
+        if Position[i-1] == -1:
+            if (stop_price < High[i]): 
+                Position[i] = 0
+                Win_loss[i] = stop_price + Spr[i]/2
+                Ent_exit[i] = 1
+                continue
+            elif (exit_price > Low[i]): 
+                Position[i] = 0
+                Win_loss[i] = exit_price + Spr[i]/2
+                Ent_exit[i] = 2
+                continue
+            else:
+                Position[i] = -1
+    return [Win_loss, Position, Ent_exit]
+
+
+def strategy_outcome(data_sl, win_loss, position):
+    data_sl['win_loss'] = data_sl[ win_loss ]
+    data_sl['position'] = data_sl[ position ]
+
+    data_sl_win_loss = data_sl[['win_loss','position']][data_sl.win_loss != 0].copy()
+
+    data_sl_win_loss[['strategy_return']] = 0
+    data_sl_win_loss.strategy_return = data_sl_win_loss.position.shift(1)*(data_sl_win_loss.win_loss - 
+                                                        data_sl_win_loss.win_loss.shift(1))/data_sl_win_loss.win_loss.shift(1)
+    data_sl_win_loss.strategy_return = (1+data_sl_win_loss.strategy_return).cumprod()
+    data_sl_win_loss['strategy_return_%'] = data_sl_win_loss.strategy_return*100-100
+
+    data_sl_win_loss[['strategy_return_%']].plot(figsize=(15,3),grid=True)
+
+    print('FINAL RETURN :  %.2f ' % (data_sl_win_loss.strategy_return[-1]*100) )
+    print('MAX RETURN:  %.2f ' % (data_sl_win_loss.strategy_return.max()*100) )
+    print('MIN RETURN:  %.2f ' % (data_sl_win_loss.strategy_return.min()*100) )
+
+    data_sl_win_loss['returns'] = data_sl_win_loss.position.shift()*(data_sl_win_loss.win_loss - \
+                                                                    data_sl_win_loss.win_loss.shift(1))
+
+    wins = data_sl_win_loss.returns[data_sl_win_loss.returns>0].count()
+    losses = data_sl_win_loss.returns[data_sl_win_loss.returns<0].count()
+
+    mean_win = data_sl_win_loss.returns[data_sl_win_loss.returns>0].mean()
+    mean_loss = data_sl_win_loss.returns[data_sl_win_loss.returns<0].mean()
+
+    print('Wins: ', wins,'; Losses: ', losses, '; Win rate: ','%.3g'%(wins/(wins+losses)))
+    print('Average profit in pips: ','%.3g'%(mean_win/0.0001),'; Average loss in pips: ','%.3g'%(-mean_loss/0.0001))
+
