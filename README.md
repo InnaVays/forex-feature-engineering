@@ -1,20 +1,39 @@
 # forex-feature-engineering
 
 ## Forex Trading Strategy Search
-This project aims to identify profitable trading strategies for different Forex pairs and granularities over a given period of time. The project utilizes feature engineering techniques to search for combinations of technical indicators that have a higher potential to predict the correct price swing direction. The generated combinations are then used as features for a Support Vector Machine (SVM) model to boost strategy prediction power.
+This project aims to develop and evaluate trading strategies based on technical indicators to predict the next day's price direction. Instead of blindly trusting popular strategies, we systematically test thousands of indicator combinations to find statistically significant trading conditions.
 
 ## Overview
 The project consists of the following steps:
 
 ### Part 1 
 TechInd_strategy_backtester.ipynb
-- **Data Import**: Import data a given Forex pair, granularity, and time period from OANDA api (some data files used in project are aready saved in hist_data directory).
-- **Data Preprocessing**: Convert OANDA jason data to dataframe, clean and preprocess.
-- **Feature Generation**: Apply numerous technical indicators to the preprocessed data, generating a large set of potential trading strategies.
-- **Labeling**: Calculate the expected profit for each trading strategy, and label each strategy as either "profitable" or "unprofitable".
-- **Strategy Search**: Search through the field of all possible trading strategies, selecting only those with a high potential to generate profit.
-- **Model Training**: Train a Support Vector Machine (SVM) Classification model using the selected profitable indicator combinations as features.
-- **SVM Classification Model Performance Evaluating**
+Project Goals
+- Collect real trading data (e.g., from OANDA).
+- Backtest trading strategies that use combinations of technical indicators.
+- Optimize indicator parameters for statistically reliable buy/sell conditions.
+- Test strategies across multiple time periods to avoid overfitting.
+- Use Bayesian optimization to find robust parameter sets.
+- Evaluate results using confidence intervals to ensure realistic expectations.
+
+### How It Works
+- Generate Trading Strategies. Combine different technical indicators (e.g., RSI, SMA, Stochastics).
+Create thousands of potential buy/sell conditions.
+Backtest Strategies
+
+- Simulate trades using historical data. Calculate final return, max return, and min return for each strategy.
+Consider trading commissions and realistic stop-loss/take-profit levels.
+
+- Analyze Performance. Identify the best-performing strategies based on return metrics.
+
+- Test performance consistency across multiple time periods.
+
+- Evaluate the distribution of returns to detect overfitting.
+
+- Find Statistically Reliable Strategies. Or Not! 
+
+- Apply Bayesian optimization to tune indicator parameters.
+- Select strategies with positive mean return within confidence intervals.
 
 ### Part 2 
 FinNews_feature_extract.ipynb
@@ -25,4 +44,4 @@ FinNews_feature_extract.ipynb
 
 
 ## Acknowledgments
-Special thanks to the developers of the TA-Lib library, which was used extensively in the generation of technical indicators and ChatGPT for this marvelous README file. 
+Special thanks to the developers of the TA-Lib library, which was used extensively in the generation of technical indicators and ChatGPT. 
